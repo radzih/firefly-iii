@@ -91,6 +91,12 @@ class DownloadExchangeRates implements ShouldQueue
         foreach ($currencies as $currency) {
             $this->downloadRates($currency);
         }
+        foreach (config('cer.fallback_currencies', []) as $code) {
+            $currency = $this->repository->findByCode($code);
+            if ($currency instanceof TransactionCurrency) {
+                $this->tryFallbackDownload($currency);
+            }
+        }
     }
 
     public function setDate(Carbon $date): void
@@ -115,12 +121,14 @@ class DownloadExchangeRates implements ShouldQueue
             $res = $client->get($url);
         } catch (ConnectException|RequestException $e) {
             Log::warning(sprintf('Trying to grab "%s" resulted in error "%s".', $url, $e->getMessage()));
+            $this->tryFallbackDownload($currency);
 
             return;
         }
         $statusCode = $res->getStatusCode();
         if (200 !== $statusCode) {
             Log::warning(sprintf('Trying to grab "%s" resulted in status code %d.', $url, $statusCode));
+            $this->tryFallbackDownload($currency);
 
             return;
         }
@@ -135,6 +143,36 @@ class DownloadExchangeRates implements ShouldQueue
         if (!$date instanceof Carbon) {
             return;
         }
+        $this->saveRates($currency, $date, $json['rates']);
+    }
+
+    /**
+     * @throws JsonException
+     */
+    private function tryFallbackDownload(TransactionCurrency $currency): void
+    {
+        if (!in_array($currency->code, config('cer.fallback_currencies', []), true)) {
+            return;
+        }
+        $url = sprintf((string) config('cer.fallback_url'), $currency->code);
+        try {
+            $res = (new Client())->get($url);
+        } catch (ConnectException|RequestException $e) {
+            Log::warning(sprintf('Fallback rates for %s failed: %s', $currency->code, $e->getMessage()));
+
+            return;
+        }
+        if (200 !== $res->getStatusCode()) {
+            return;
+        }
+        $json = json_decode((string) $res->getBody(), true);
+        if (!is_array($json) || 'success' !== ($json['result'] ?? '') || !is_array($json['rates'] ?? null)) {
+            return;
+        }
+        $date = isset($json['time_last_update_unix'])
+            ? Carbon::createFromTimestamp((int) $json['time_last_update_unix'], config('app.timezone'))->startOfDay()
+            : clone $this->date;
+        Log::info(sprintf('Saved fallback exchange rates for %s.', $currency->code));
         $this->saveRates($currency, $date, $json['rates']);
     }
 

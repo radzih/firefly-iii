@@ -23,8 +23,10 @@
 declare(strict_types=1);
 
 return [
-    'url'              => 'https://ff3exchangerates.z6.web.core.windows.net',
-    'enabled'          => env('ENABLE_EXCHANGE_RATES', false), // no longer used, is the default.
+    'url'                  => 'https://ff3exchangerates.z6.web.core.windows.net',
+    'fallback_url'         => 'https://open.er-api.com/v6/latest/%s',
+    'fallback_currencies'  => ['GEL'],
+    'enabled'              => env('ENABLE_EXCHANGE_RATES', false), // no longer used, is the default.
     'download_enabled' => env('ENABLE_EXTERNAL_RATES', false), // no longer used, only for default.
 
     // if currencies are added, default rates must be added as well!
@@ -38,6 +40,7 @@ return [
         'HUF' => 410.79798,
         'GBP' => 0.86003261,
         'UAH' => 46.867455,
+        'GEL' => 3.001367,
         'PLN' => 4.2802098,
         'TRY' => 43.180054,
         'DKK' => 7.4591,
